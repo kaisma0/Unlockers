@@ -17,7 +17,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p temp/uplay temp/koaloader output/32bit output/64bit
+          mkdir -p temp/uplay temp/koaloader output/32bit output/64bit temp/compare_new temp/compare_old
 
           UPLAY_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/UplayR1Unlocker/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
           KOALA_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/Koaloader/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
@@ -35,37 +35,65 @@ jobs:
           cp temp/koaloader/version-64/version.dll output/64bit/version.dll
 
           cd output/32bit
-          zip -X -j ../../new_32.zip *
+          zip -X -j ../../temp_32.zip *
           cd ../..
 
           cd output/64bit
-          zip -X -j ../../new_64.zip *
+          zip -X -j ../../temp_64.zip *
           cd ../..
 
-          HASH_NEW_32=$(sha256sum new_32.zip | awk '{print $1}')
-          HASH_NEW_64=$(sha256sum new_64.zip | awk '{print $1}')
-
+          UPDATE_32=false
           if [ -f "UplayR1Unlocker32.zip" ]; then
-            HASH_OLD_32=$(sha256sum UplayR1Unlocker32.zip | awk '{print $1}')
-          else
-            HASH_OLD_32="none"
-          fi
-
-          if [ -f "UplayR1Unlocker64.zip" ]; then
-            HASH_OLD_64=$(sha256sum UplayR1Unlocker64.zip | awk '{print $1}')
-          else
-            HASH_OLD_64="none"
-          fi
-
-          if [ "$HASH_NEW_32" != "$HASH_OLD_32" ] || [ "$HASH_NEW_64" != "$HASH_OLD_64" ]; then
-            mv new_32.zip UplayR1Unlocker32.zip
-            mv new_64.zip UplayR1Unlocker64.zip
+            unzip -q temp_32.zip -d temp/compare_new/32
+            unzip -q UplayR1Unlocker32.zip -d temp/compare_old/32
             
+            if diff -r -q temp/compare_new/32 temp/compare_old/32 > /dev/null; then
+              echo "32-bit content match. Skipping."
+            else
+              echo "32-bit content diff. Updating."
+              UPDATE_32=true
+            fi
+          else
+            echo "First run 32-bit."
+            UPDATE_32=true
+          fi
+
+          UPDATE_64=false
+          if [ -f "UplayR1Unlocker64.zip" ]; then
+            unzip -q temp_64.zip -d temp/compare_new/64
+            unzip -q UplayR1Unlocker64.zip -d temp/compare_old/64
+            
+            if diff -r -q temp/compare_new/64 temp/compare_old/64 > /dev/null; then
+               echo "64-bit content match. Skipping."
+            else
+               echo "64-bit content diff. Updating."
+               UPDATE_64=true
+            fi
+          else
+            echo "First run 64-bit."
+            UPDATE_64=true
+          fi
+
+          DID_UPDATE=false
+          
+          if [ "$UPDATE_32" = true ]; then
+            mv temp_32.zip UplayR1Unlocker32.zip
+            DID_UPDATE=true
+          fi
+
+          if [ "$UPDATE_64" = true ]; then
+            mv temp_64.zip UplayR1Unlocker64.zip
+            DID_UPDATE=true
+          fi
+
+          rm -rf temp output temp_32.zip temp_64.zip
+
+          if [ "$DID_UPDATE" = true ]; then
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git add UplayR1Unlocker32.zip UplayR1Unlocker64.zip
             git commit -m "Update Uplay Unlockers"
             git push
+          else
+            echo "No content changes."
           fi
-
-          rm -rf temp output new_32.zip new_64.zip
