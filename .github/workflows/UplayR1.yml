@@ -92,7 +92,7 @@ jobs:
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git add UplayR1Unlocker32.zip UplayR1Unlocker64.zip
-            git commit -m "Update Uplay Unlockers"
+            git commit -m "Update Uplay R1 Unlockers"
             git push
           else
             echo "No content changes."
