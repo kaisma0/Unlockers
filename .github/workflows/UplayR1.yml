@@ -1,0 +1,71 @@
+name: Update UplayR1
+
+on: 
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-unlockers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process and Update
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p temp/uplay temp/koaloader output/32bit output/64bit
+
+          UPLAY_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/UplayR1Unlocker/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+          KOALA_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/Koaloader/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+
+          curl -L -o temp/uplay.zip "$UPLAY_URL"
+          curl -L -o temp/koaloader.zip "$KOALA_URL"
+
+          unzip -q temp/uplay.zip -d temp/uplay
+          unzip -q temp/koaloader.zip -d temp/koaloader
+
+          cp temp/uplay/uplay_r1_loader.dll output/32bit/UplayR1Unlocker32.dll
+          cp temp/koaloader/version-32/version.dll output/32bit/version.dll
+
+          cp temp/uplay/uplay_r1_loader64.dll output/64bit/UplayR1Unlocker64.dll
+          cp temp/koaloader/version-64/version.dll output/64bit/version.dll
+
+          cd output/32bit
+          zip -X -j ../../new_32.zip *
+          cd ../..
+
+          cd output/64bit
+          zip -X -j ../../new_64.zip *
+          cd ../..
+
+          HASH_NEW_32=$(sha256sum new_32.zip | awk '{print $1}')
+          HASH_NEW_64=$(sha256sum new_64.zip | awk '{print $1}')
+
+          if [ -f "UplayR1Unlocker32.zip" ]; then
+            HASH_OLD_32=$(sha256sum UplayR1Unlocker32.zip | awk '{print $1}')
+          else
+            HASH_OLD_32="none"
+          fi
+
+          if [ -f "UplayR1Unlocker64.zip" ]; then
+            HASH_OLD_64=$(sha256sum UplayR1Unlocker64.zip | awk '{print $1}')
+          else
+            HASH_OLD_64="none"
+          fi
+
+          if [ "$HASH_NEW_32" != "$HASH_OLD_32" ] || [ "$HASH_NEW_64" != "$HASH_OLD_64" ]; then
+            mv new_32.zip UplayR1Unlocker32.zip
+            mv new_64.zip UplayR1Unlocker64.zip
+            
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add UplayR1Unlocker32.zip UplayR1Unlocker64.zip
+            git commit -m "Update Uplay Unlockers"
+            git push
+          fi
+
+          rm -rf temp output new_32.zip new_64.zip
