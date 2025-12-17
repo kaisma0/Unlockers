@@ -1,0 +1,99 @@
+name: Update UplayR2
+
+on: 
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-unlockers-r2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process and Update
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p temp/uplay temp/koaloader output/32bit output/64bit temp/compare_new temp/compare_old
+
+          UPLAY_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/UplayR2Unlocker/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+          KOALA_URL=$(curl -sH "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/acidicoala/Koaloader/releases/latest | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+
+          curl -L -o temp/uplay.zip "$UPLAY_URL"
+          curl -L -o temp/koaloader.zip "$KOALA_URL"
+
+          unzip -q temp/uplay.zip -d temp/uplay
+          unzip -q temp/koaloader.zip -d temp/koaloader
+
+          cp temp/uplay/upc_r2_loader.dll output/32bit/UplayR2Unlocker32.dll
+          cp temp/koaloader/version-32/version.dll output/32bit/version.dll
+
+          cp temp/uplay/upc_r2_loader64.dll output/64bit/UplayR2Unlocker64.dll
+          cp temp/koaloader/version-64/version.dll output/64bit/version.dll
+
+          cd output/32bit
+          zip -X -j ../../temp_32.zip *
+          cd ../..
+
+          cd output/64bit
+          zip -X -j ../../temp_64.zip *
+          cd ../..
+
+          UPDATE_32=false
+          if [ -f "UplayR2Unlocker32.zip" ]; then
+            unzip -q temp_32.zip -d temp/compare_new/32
+            unzip -q UplayR2Unlocker32.zip -d temp/compare_old/32
+            
+            if diff -r -q temp/compare_new/32 temp/compare_old/32 > /dev/null; then
+              echo "32-bit content match. Skipping."
+            else
+              echo "32-bit content diff. Updating."
+              UPDATE_32=true
+            fi
+          else
+            echo "First run 32-bit."
+            UPDATE_32=true
+          fi
+
+          UPDATE_64=false
+          if [ -f "UplayR2Unlocker64.zip" ]; then
+            unzip -q temp_64.zip -d temp/compare_new/64
+            unzip -q UplayR2Unlocker64.zip -d temp/compare_old/64
+            
+            if diff -r -q temp/compare_new/64 temp/compare_old/64 > /dev/null; then
+               echo "64-bit content match. Skipping."
+            else
+               echo "64-bit content diff. Updating."
+               UPDATE_64=true
+            fi
+          else
+            echo "First run 64-bit."
+            UPDATE_64=true
+          fi
+
+          DID_UPDATE=false
+          
+          if [ "$UPDATE_32" = true ]; then
+            mv temp_32.zip UplayR2Unlocker32.zip
+            DID_UPDATE=true
+          fi
+
+          if [ "$UPDATE_64" = true ]; then
+            mv temp_64.zip UplayR2Unlocker64.zip
+            DID_UPDATE=true
+          fi
+
+          rm -rf temp output temp_32.zip temp_64.zip
+
+          if [ "$DID_UPDATE" = true ]; then
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add UplayR2Unlocker32.zip UplayR2Unlocker64.zip
+            git commit -m "Update Uplay R2 Unlockers"
+            git push
+          else
+            echo "No content changes."
+          fi
